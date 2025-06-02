@@ -9,11 +9,10 @@ import plotly.express as px
 import re
 import time
 import json
-import base64
 
-# --------------------------------------------
-# Nombres de archivos de datos en disco local
-# --------------------------------------------
+# ------------------------------
+# Nombres de archivos de datos
+# ------------------------------
 user_data_file = 'user_data.xlsx'
 schedule_file = 'blocked_schedules.xlsx'
 lab_capacities_file = 'lab_capacities.json'
@@ -21,21 +20,18 @@ group_limits_file = 'group_limits.xlsx'
 comments_file = 'comments.xlsx'
 initial_image_file_B501 = 'initial_image_B501.png'
 initial_image_file_C402 = 'initial_image_C402.png'
-# Hemos eliminado footer_image porque ya no usamos un fondo que cubra toda la app
+# Ya no usamos footer_image porque quitamos el fondo grande
 # footer_image = 'fondo.jpg'
 
-# -------------------------------------------------
-# Funciones para cargar/guardar capacidades de lab.
-# -------------------------------------------------
+# ---------------------------------
+# Cargar/Guardar capacidades de lab
+# ---------------------------------
 def load_lab_capacities():
     if os.path.exists(lab_capacities_file):
         with open(lab_capacities_file, 'r') as f:
             return json.load(f)
     else:
-        capacities = {
-            "B501": 15,
-            "C402": 22
-        }
+        capacities = {"B501": 15, "C402": 22}
         with open(lab_capacities_file, 'w') as f:
             json.dump(capacities, f)
         return capacities
@@ -47,9 +43,9 @@ def save_lab_capacities(capacities):
 lab_capacities = load_lab_capacities()
 laboratories = ["B501", "C402"]
 
-# --------------------------------------------
-# Generar franjas de tiempo de 08:00 a 20:00
-# --------------------------------------------
+# ------------------------------
+# Generar franjas de horario
+# ------------------------------
 def generate_time_slots(start_time, end_time, interval_minutes=30):
     slots = []
     current_time = start_time
@@ -64,9 +60,9 @@ hours = generate_time_slots(
     interval_minutes=30
 )
 
-# --------------------------------------------
-# Funciones para manejar datos de usuarios
-# --------------------------------------------
+# --------------------------------
+# Cargar/Guardar datos de usuarios
+# --------------------------------
 def load_user_data():
     if os.path.exists(user_data_file):
         df = pd.read_excel(user_data_file, index_col=None)
@@ -94,14 +90,9 @@ def load_user_data():
 def save_user_data(df):
     df.to_excel(user_data_file, index=False)
 
-def validate_codigo(codigo):
-    # Debe ser un número de 8 dígitos que empiece con '201'
-    pattern = r'^201\d{5}$'
-    return bool(re.match(pattern, codigo))
-
-# --------------------------------------------
-# Funciones para manejar horarios bloqueados
-# --------------------------------------------
+# --------------------------------
+# Cargar/Guardar horarios bloqueados
+# --------------------------------
 def load_schedule_data():
     global schedule_data
     if os.path.exists(schedule_file):
@@ -139,9 +130,9 @@ def get_reservations_for_day(date_str):
         reservations = pd.DataFrame(columns=required_columns)
     return reservations
 
-# --------------------------------------------
-# Mostrar lineamientos para laboratorios
-# --------------------------------------------
+# --------------------------------
+# Mostrar lineamientos de lab
+# --------------------------------
 def show_rules(lab=None):
     if lab:
         rules_file = f'lineamientos_{lab}.txt'
@@ -164,17 +155,17 @@ def show_rules(lab=None):
             f.write(rules)
     st.markdown(rules)
 
-# --------------------------------------------
-# Resetear variables de sesión cuando cambia lab o fecha
-# --------------------------------------------
+# --------------------------------
+# Resetear selección cuando cambia lab o fecha
+# --------------------------------
 def reset_availability():
     for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
         if key in st.session_state:
             del st.session_state[key]
 
-# --------------------------------------------
-# Vista de administrador (panel lateral)
-# --------------------------------------------
+# --------------------------------
+# Vista de administrador
+# --------------------------------
 def admin_view():
     st.write("## Panel de administración")
     admin_option = st.sidebar.selectbox(
@@ -218,7 +209,6 @@ def show_admin_dashboard():
     st.write("### Dashboard administrativo")
     st.write("#### Estadísticas de reservas")
     reservation_files = glob.glob('*.xlsx')
-    # Excluir los archivos de configuración y datos de la app
     exclude = [
         user_data_file, schedule_file,
         initial_image_file_B501, initial_image_file_C402,
@@ -346,7 +336,6 @@ def block_schedule():
         st.success(f"Horario bloqueado en laboratorio {selected_lab} el día {date_str} de {selected_start_time} a {selected_end_time}.")
         time.sleep(2)
 
-        # Notificar y eliminar reservas afectadas
         affected_reservations = []
         for blocked_hour in blocked_hours:
             reservations = get_reservations_for_day(date_str)
@@ -409,6 +398,7 @@ def grant_c402_access():
                 st.success(f"Acceso al laboratorio C402 habilitado para {user_row['Nombre']} {user_row['Apellido']}.")
                 time.sleep(2)
                 st.experimental_rerun()
+                return
 
         elif new_access == "Deshabilitar":
             if st.button("Actualizar acceso a Deshabilitado", key='disable_access_button'):
@@ -418,6 +408,7 @@ def grant_c402_access():
                 st.success(f"Acceso al laboratorio C402 deshabilitado para {user_row['Nombre']} {user_row['Apellido']}.")
                 time.sleep(2)
                 st.experimental_rerun()
+                return
 
         elif new_access == "Habilitar temporalmente":
             with st.form(key='temp_access_form'):
@@ -431,6 +422,7 @@ def grant_c402_access():
                 st.success(f"Acceso temporal al laboratorio C402 habilitado para {user_row['Nombre']} {user_row['Apellido']} hasta {expiry_date.strftime('%Y-%m-%d')}.")
                 time.sleep(2)
                 st.experimental_rerun()
+                return
 
 def delete_reservations():
     st.write("### Eliminar reservas")
@@ -494,12 +486,17 @@ def delete_reservations():
             st.success("Reserva eliminada exitosamente.")
             time.sleep(2)
             st.experimental_rerun()
+            return
     else:
         st.info("No tienes reservas para eliminar.")
 
 def edit_rules():
     st.write("### Editar lineamientos")
-    selected_lab = st.selectbox("Seleccionar laboratorio para editar lineamientos", ["Global"] + laboratories, key='select_lab_edit_rules')
+    selected_lab = st.selectbox(
+        "Seleccionar laboratorio para editar lineamientos",
+        ["Global"] + laboratories,
+        key='select_lab_edit_rules'
+    )
     if selected_lab == "Global":
         rules_file = 'lineamientos.txt'
     else:
@@ -518,7 +515,11 @@ def edit_rules():
 
 def manage_accounts():
     st.write("### Administrar cuentas")
-    admin_option = st.selectbox("Selecciona una acción", ["Agregar administrador", "Agregar C402 Admin"], key='manage_accounts_option')
+    admin_option = st.selectbox(
+        "Selecciona una acción",
+        ["Agregar administrador", "Agregar C402 Admin"],
+        key='manage_accounts_option'
+    )
     if admin_option == "Agregar administrador":
         st.write("Agregar nuevas cuentas de administrador.")
         with st.form(key='add_admin_form'):
@@ -549,6 +550,7 @@ def manage_accounts():
                 st.success("Nuevo administrador agregado exitosamente.")
                 time.sleep(2)
                 st.experimental_rerun()
+                return
 
     elif admin_option == "Agregar C402 Admin":
         st.write("Agregar nuevas cuentas de C402 Admin.")
@@ -580,6 +582,7 @@ def manage_accounts():
                 st.success("Nuevo C402 Admin agregado exitosamente.")
                 time.sleep(2)
                 st.experimental_rerun()
+                return
 
 def manage_initial_images():
     st.write("### Gestionar imágenes iniciales")
@@ -594,6 +597,7 @@ def manage_initial_images():
             st.success(f"Imagen para {lab} subida exitosamente.")
             time.sleep(2)
             st.experimental_rerun()
+            return
         if os.path.exists(image_file):
             st.image(image_file, caption=f"Imagen actual para {lab}", use_column_width=True)
 
@@ -623,6 +627,7 @@ def configure_group_limits():
         st.success("Límite de grupo actualizado exitosamente.")
         time.sleep(2)
         st.experimental_rerun()
+        return
 
 def configure_lab_capacities():
     st.write("### Configurar capacidades de laboratorios")
@@ -641,10 +646,11 @@ def configure_lab_capacities():
         st.success(f"Capacidad del laboratorio {selected_lab} actualizada a {new_capacity}.")
         time.sleep(2)
         st.experimental_rerun()
+        return
 
-# --------------------------------------------
-# Vista específica para C402 Admin
-# --------------------------------------------
+# --------------------------------
+# Vista para C402 Admin
+# --------------------------------
 def admin_c402_view():
     st.write("## Administración C402")
     admin_option = st.selectbox(
@@ -700,12 +706,13 @@ def confirm_reservations():
             st.success("Reserva confirmada exitosamente.")
             time.sleep(2)
             st.experimental_rerun()
+            return
     else:
         st.info("No hay reservas para confirmar.")
 
-# --------------------------------------------
-# Vista del alumno: ver y confirmar sus reservas
-# --------------------------------------------
+# --------------------------------
+# Vista “Mis reservas” del alumno
+# --------------------------------
 def view_user_reservations():
     st.write("### Mis reservas")
     user_data = load_user_data()
@@ -767,12 +774,13 @@ def view_user_reservations():
             st.success("Reserva eliminada exitosamente.")
             time.sleep(2)
             st.experimental_rerun()
+            return
     else:
         st.info("No tienes reservas registradas.")
 
-# --------------------------------------------
-# Sección de comentarios para alumnos
-# --------------------------------------------
+# --------------------------------
+# Sección de comentarios del alumno
+# --------------------------------
 def comments_section():
     st.write("### Zona de comentarios")
     with st.form(key='comments_form'):
@@ -800,6 +808,7 @@ def comments_section():
             st.success("Comentario enviado exitosamente.")
             time.sleep(2)
             st.experimental_rerun()
+            return
 
     if os.path.exists(comments_file):
         st.write("#### Comentarios recientes:")
@@ -808,23 +817,24 @@ def comments_section():
         comments = comments.sort_values('Fecha', ascending=False).head(10)
         st.dataframe(comments.reset_index(drop=True))
 
-# --------------------------------------------
-# Función de inicio de sesión (login) sin fondo
-# --------------------------------------------
+# --------------------------------
+# Función de login (sin fondo completo)
+# --------------------------------
 def login():
-    # --- AQUÍ SE QUITA TODO LO RELACIONADO CON EL CSS DE FONDO ---
-    # Si quisieras mostrar un logo pequeño, descomenta las siguientes líneas y ajusta el ancho:
+    # --- Ya no inyectamos CSS de fondo aquí ---
+    # Si quisieras un logo pequeño, podrías descomentar:
     # if os.path.exists('logo_pequeno.png'):
-    #     st.markdown("<div style='text-align: center; margin-bottom: 20px;'>", unsafe_allow_html=True)
+    #     st.markdown("<div style='text-align:center; margin-bottom:20px;'>", unsafe_allow_html=True)
     #     st.image('logo_pequeno.png', width=200)
     #     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Centrar el formulario de login
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # Usamos columnas [1,4,1] para que el formulario sea más ancho y no se vea tan estrecho
+    col1, col2, col3 = st.columns([1, 4, 1])
     with col2:
         st.markdown("<h1 style='text-align: center; color: #002D62;'>Lab Sync</h1>", unsafe_allow_html=True)
         st.markdown("<h2 style='text-align: center; color: #002D62;'>Facultad de Ingeniería - Universidad del Pacífico</h2>", unsafe_allow_html=True)
         st.markdown("---")
+
         if 'login_option' not in st.session_state:
             st.session_state['login_option'] = 'Iniciar sesión'
 
@@ -845,6 +855,7 @@ def login():
                     contraseña = st.text_input("Contraseña", type="password", key="login_password")
                     submit_button = st.form_submit_button(label='Entrar')
                 if submit_button:
+                    # Credenciales hardcodeadas para admin y c402_admin
                     if correo == 'admin@up.edu.pe' and contraseña == 'admin123':
                         st.session_state['logged_in'] = True
                         st.session_state['role'] = 'admin'
@@ -853,6 +864,7 @@ def login():
                         st.success(f"Inicio de sesión exitoso como {correo}.")
                         time.sleep(2)
                         st.experimental_rerun()
+                        return
                     elif correo.endswith('@c402.up.edu.pe') and contraseña == 'c402admin123':
                         st.session_state['logged_in'] = True
                         st.session_state['role'] = 'c402_admin'
@@ -861,6 +873,7 @@ def login():
                         st.success(f"Inicio de sesión exitoso como {correo}.")
                         time.sleep(2)
                         st.experimental_rerun()
+                        return
                     else:
                         user_data = load_user_data()
                         user_row = user_data[
@@ -875,6 +888,7 @@ def login():
                             st.success(f"Inicio de sesión exitoso como {correo}.")
                             time.sleep(2)
                             st.experimental_rerun()
+                            return
                         else:
                             st.error("Correo o contraseña incorrectos.")
                 if st.button("Olvidé mi contraseña"):
@@ -882,12 +896,13 @@ def login():
         elif st.session_state['login_option'] == "Registrarse":
             register_user()
 
-# --------------------------------------------
-# Función para registrar nuevos usuarios
-# --------------------------------------------
+# --------------------------------
+# Función de registro (sin validar código)
+# --------------------------------
 def register_user():
     st.write("## Registro de nuevo usuario")
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # Nuevamente columnas [1,4,1] para un formulario más ancho
+    col1, col2, col3 = st.columns([1, 4, 1])
     with col2:
         if 'show_register_fields' not in st.session_state:
             st.session_state.show_register_fields = True
@@ -903,43 +918,44 @@ def register_user():
                 user_data = load_user_data()
                 if correo in user_data['Correo'].values:
                     st.error("El correo electrónico ya está registrado. Por favor, inicia sesión o usa otro correo.")
+                    return
+                # Eliminamos la validación de código de alumno
+                if correo.endswith('@alum.up.edu.pe'):
+                    rol = 'alumno'
                 else:
-                    if correo.endswith('@alum.up.edu.pe'):
-                        rol = 'alumno'
-                    else:
-                        st.error("Solo los alumnos pueden registrarse con un correo institucional '@alum.up.edu.pe'.")
-                        return
-                    if not validate_codigo(codigo):
-                        st.error("Código de alumno inválido. Debe ser un número de 8 dígitos que empiece con '201'.")
-                        return
-                    c402_access = 0
-                    new_user = pd.DataFrame({
-                        'Nombre': [nombre],
-                        'Apellido': [apellido],
-                        'Correo': [correo],
-                        'Rol': [rol],
-                        'Código': [codigo],
-                        'Contraseña': [contraseña],
-                        'C402_access': [c402_access],
-                        'Temp_access_expiry': [pd.NaT]
-                    })
-                    user_data = pd.concat([user_data, new_user], ignore_index=True)
-                    save_user_data(user_data)
-                    st.success("Registro exitoso. Ahora puedes iniciar sesión.")
-                    time.sleep(2)
-                    st.session_state.show_register_fields = False
-                    st.session_state['login_option'] = 'Iniciar sesión'
-                    st.experimental_rerun()
+                    st.error("Solo los alumnos pueden registrarse con un correo institucional '@alum.up.edu.pe'.")
+                    return
+                # Ya no verificamos validate_codigo(codigo)
+                c402_access = 0
+                new_user = pd.DataFrame({
+                    'Nombre': [nombre],
+                    'Apellido': [apellido],
+                    'Correo': [correo],
+                    'Rol': [rol],
+                    'Código': [codigo],
+                    'Contraseña': [contraseña],
+                    'C402_access': [c402_access],
+                    'Temp_access_expiry': [pd.NaT]
+                })
+                user_data = pd.concat([user_data, new_user], ignore_index=True)
+                save_user_data(user_data)
+                st.success("Registro exitoso. Ahora puedes iniciar sesión.")
+                time.sleep(2)
+                st.session_state.show_register_fields = False
+                st.session_state['login_option'] = 'Iniciar sesión'
+                st.experimental_rerun()
+                return
         else:
             st.success("Registro exitoso. Ahora puedes iniciar sesión.")
             if st.button("Ir a Iniciar sesión", key='go_to_login_button'):
                 st.session_state['login_option'] = 'Iniciar sesión'
                 st.session_state.show_register_fields = True
                 st.experimental_rerun()
+                return
 
-# --------------------------------------------
-# Función para cerrar sesión
-# --------------------------------------------
+# --------------------------------
+# Función de cierre de sesión
+# --------------------------------
 def logout():
     for key in list(st.session_state.keys()):
         if key not in ['logged_in', 'role', 'username', 'menu_option']:
@@ -951,17 +967,18 @@ def logout():
     st.success("Has cerrado sesión correctamente.")
     time.sleep(2)
     st.experimental_rerun()
+    return
 
-# --------------------------------------------
-# Vista principal para alumnos (reservar)
-# --------------------------------------------
+# --------------------------------
+# Vista del alumno: reserva de lab
+# --------------------------------
 def student_view():
     st.write("## Reserva de laboratorio")
     user_data = load_user_data()
     current_user = st.session_state['username']
     user_row = user_data[user_data['Correo'] == current_user].iloc[0]
 
-    # Determinar accesibilidad a C402 según su permiso
+    # Determinar accesibilidad a C402
     if user_row['C402_access'] == 1:
         if pd.notna(user_row['Temp_access_expiry']):
             expiry_date = pd.to_datetime(user_row['Temp_access_expiry'])
@@ -978,7 +995,7 @@ def student_view():
     else:
         accessible_labs = ["B501"]
 
-    # Paso 1: Seleccionar laboratorio y fecha
+    # Paso 1: Seleccionar lab y fecha
     st.write("### Paso 1: Seleccionar laboratorio y fecha")
     selected_lab = st.selectbox(
         "Seleccionar laboratorio",
@@ -993,17 +1010,16 @@ def student_view():
         on_change=reset_availability
     )
 
-    # Mostrar imagen inicial (si existe) para B501 o C402
+    # Mostrar imagen inicial si existe
     image_file = f'initial_image_{selected_lab}.png'
     if os.path.exists(image_file):
         st.image(image_file, caption=f"Horarios disponibles para {selected_lab}", use_column_width=True)
 
-    # Mostrar lineamientos
+    # Mostrar lineamientos y paso 2
     if selected_lab and selected_day:
         date_str = selected_day.strftime("%Y-%m-%d")
         show_rules(selected_lab)
 
-        # Paso 2: Seleccionar horario deseado
         st.write("### Paso 2: Seleccionar horario deseado")
         col1, col2 = st.columns(2)
         with col1:
@@ -1038,6 +1054,7 @@ def student_view():
                 st.session_state['desired_start_time'] = selected_start_time
                 st.session_state['desired_end_time'] = selected_end_time
                 st.experimental_rerun()
+                return
 
     if ('selected_lab' in st.session_state and
         'selected_date' in st.session_state and
@@ -1065,6 +1082,7 @@ def student_view():
                 for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
                     st.session_state.pop(key, None)
                 st.experimental_rerun()
+                return
             available_hours = [hour for hour in hours if hour <= max_time]
         else:
             available_hours = hours
@@ -1076,6 +1094,7 @@ def student_view():
             for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
                 st.session_state.pop(key, None)
             st.experimental_rerun()
+            return
 
         is_blocked = blocked['Hora'].isin(desired_hours).any()
         if is_blocked:
@@ -1083,6 +1102,7 @@ def student_view():
             for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
                 st.session_state.pop(key, None)
             st.experimental_rerun()
+            return
 
         total_reservations = lab_reservations.groupby('Hora').size().reset_index(name='count')
         availability = {}
@@ -1097,6 +1117,7 @@ def student_view():
             for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
                 st.session_state.pop(key, None)
             st.experimental_rerun()
+            return
         else:
             st.write("### Disponibilidad por horario:")
             availability_df = pd.DataFrame({
@@ -1149,12 +1170,14 @@ def student_view():
                         for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
                             st.session_state.pop(key, None)
                         st.experimental_rerun()
+                        return
 
                 if selected_lab == 'C402' and user_row['C402_access'] == 0:
                     st.error("No tienes acceso al laboratorio C402.")
                     for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
                         st.session_state.pop(key, None)
                     st.experimental_rerun()
+                    return
 
                 if selected_lab == 'C402' and reservation_type == 'Grupal':
                     if os.path.exists(group_limits_file):
@@ -1194,19 +1217,20 @@ def student_view():
                 for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
                     st.session_state.pop(key, None)
                 st.experimental_rerun()
+                return
 
     st.write("---")
     comments_section()
 
-# --------------------------------------------
-# Función principal: controla flujo según sesión
-# --------------------------------------------
+# --------------------------------
+# Función principal
+# --------------------------------
 def main():
     load_schedule_data()
 
+    # CSS global (sin fondo completo)
     css = """
     <style>
-    /* Estilo general (sin imagen de fondo) */
     body {
         background-color: #f0f2f6;
         color: #000000;
@@ -1272,6 +1296,7 @@ def main():
         if choice != st.session_state['menu_option']:
             st.session_state['menu_option'] = choice
             st.experimental_rerun()
+            return
 
         if choice == "Inicio":
             st.write(f"### Bienvenido a Lab Sync, {user_row['Nombre']} {user_row['Apellido']}.")
@@ -1283,24 +1308,29 @@ def main():
                     if st.button("Reservar laboratorio"):
                         st.session_state['menu_option'] = "Reservar laboratorio"
                         st.experimental_rerun()
+                        return
                 with col2:
                     if st.button("Mis reservas"):
                         st.session_state['menu_option'] = "Mis reservas"
                         st.experimental_rerun()
+                        return
                 with st.container():
                     if st.button("Zona de comentarios"):
                         st.session_state['menu_option'] = "Zona de comentarios"
                         st.experimental_rerun()
+                        return
             if st.session_state['role'] == 'admin':
                 with col1:
                     if st.button("Panel de administración"):
                         st.session_state['menu_option'] = "Administración"
                         st.experimental_rerun()
+                        return
             if st.session_state['role'] == 'c402_admin':
                 with col1:
                     if st.button("Administración C402"):
                         st.session_state['menu_option'] = "Administración C402"
                         st.experimental_rerun()
+                        return
             st.markdown(
                 """
                 <div class='footer'>
@@ -1309,33 +1339,41 @@ def main():
                 """,
                 unsafe_allow_html=True
             )
+
         elif choice == "Reservar laboratorio":
             if st.session_state['role'] not in ['admin', 'c402_admin']:
                 student_view()
             else:
                 st.error("No tienes permisos para acceder a esta sección.")
+
         elif choice == "Administración":
             if st.session_state['role'] == 'admin':
                 admin_view()
             else:
                 st.error("No tienes permisos para acceder a esta sección.")
+
         elif choice == "Administración C402":
             if st.session_state['role'] == 'c402_admin':
                 admin_c402_view()
             else:
                 st.error("No tienes permisos para acceder a esta sección.")
+
         elif choice == "Mis reservas":
             if st.session_state['role'] not in ['admin', 'c402_admin']:
                 view_user_reservations()
             else:
                 st.error("No tienes permisos para acceder a esta sección.")
+
         elif choice == "Zona de comentarios":
             if st.session_state['role'] not in ['admin', 'c402_admin']:
                 comments_section()
             else:
                 st.error("No tienes permisos para acceder a esta sección.")
+
         elif choice == "Cerrar sesión":
             logout()
+            return
+
     else:
         login()
 
