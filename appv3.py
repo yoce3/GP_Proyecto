@@ -7,7 +7,6 @@ import os
 import glob
 import plotly.express as px
 import json
-import time
 
 # ==============================
 # ARCHIVOS LOCALES / CONFIGURACIÓN
@@ -162,16 +161,17 @@ def show_rules(lab=None):
     st.markdown(rules)
 
 # --------------------------------
-# RESET DE SELECCIONES EN SESSION STATE
+# RESET DE VARIABLES TEMPORALES
 # --------------------------------
-def reset_availability():
-    for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
-        if key in st.session_state:
-            del st.session_state[key]
+def clear_availability_state():
+    keys = ['show_availability', 'desired_start_time', 'desired_end_time', 'desired_hours', 'availability']
+    for k in keys:
+        if k in st.session_state:
+            del st.session_state[k]
 
-# ================================================
+# ================================
 # MENÚ DE AUTENTICACIÓN → LOGIN / REGISTRAR USUARIO
-# ================================================
+# ================================
 def auth_page():
     st.title("Lab Sync")
     st.subheader("Facultad de Ingeniería - Universidad del Pacífico")
@@ -179,6 +179,7 @@ def auth_page():
 
     option = st.selectbox("¿Qué deseas hacer?", ["Iniciar sesión", "Registrarse"])
     st.write("")  # Espacio extra
+
     if option == "Iniciar sesión":
         login_form()
     else:
@@ -198,8 +199,6 @@ def login_form():
             st.session_state['role'] = 'admin'
             st.session_state['username'] = correo
             st.success(f"Inicio de sesión exitoso como {correo}.")
-            time.sleep(1)
-            st.experimental_rerun()
             return
         # C402 admin hardcodeado
         if correo.endswith('@c402.up.edu.pe') and contraseña == 'c402admin123':
@@ -207,8 +206,6 @@ def login_form():
             st.session_state['role'] = 'c402_admin'
             st.session_state['username'] = correo
             st.success(f"Inicio de sesión exitoso como {correo}.")
-            time.sleep(1)
-            st.experimental_rerun()
             return
         # Usuario normal desde Excel
         user_row = df_users[
@@ -219,8 +216,6 @@ def login_form():
             st.session_state['role'] = user_row.iloc[0]['Rol']
             st.session_state['username'] = correo
             st.success(f"Inicio de sesión exitoso como {correo}.")
-            time.sleep(1)
-            st.experimental_rerun()
             return
         else:
             st.error("Correo o contraseña incorrectos.")
@@ -244,7 +239,7 @@ def register_form():
         if not correo.endswith('@alum.up.edu.pe'):
             st.error("Solo los alumnos pueden registrarse con un correo institucional '@alum.up.edu.pe'.")
             return
-        # Creamos la fila sin validar el código
+        # Creamos la fila sin validar formalmente el código
         rol = 'alumno'
         c402_access = 0
         nueva_fila = pd.DataFrame({
@@ -260,8 +255,6 @@ def register_form():
         df_users = pd.concat([df_users, nueva_fila], ignore_index=True)
         save_user_data(df_users)
         st.success("Registro exitoso. Ahora puedes iniciar sesión.")
-        time.sleep(1)
-        st.experimental_rerun()
         return
 
 # ================================================
@@ -276,8 +269,6 @@ def logout():
     st.session_state['username'] = ''
     st.session_state['menu_option'] = 'Inicio'
     st.success("Has cerrado sesión correctamente.")
-    time.sleep(1)
-    st.experimental_rerun()
     return
 
 # ================================================
@@ -938,19 +929,19 @@ def student_view():
     else:
         accessible_labs = ["B501"]
 
-    # Paso 1: Seleccionar laboratorio y fecha
+    # ---------- Paso 1: Seleccionar laboratorio y fecha ----------
     st.write("### Paso 1: Seleccionar laboratorio y fecha")
     selected_lab = st.selectbox(
         "Seleccionar laboratorio",
         accessible_labs,
         key='student_lab_select',
-        on_change=reset_availability
+        on_change=clear_availability_state
     )
     selected_day = st.date_input(
         "Seleccionar fecha",
         min_value=datetime.today().date(),
         key='student_date_select',
-        on_change=reset_availability
+        on_change=clear_availability_state
     )
 
     # Mostrar imagen inicial si existe
@@ -958,139 +949,112 @@ def student_view():
     if os.path.exists(image_file):
         st.image(image_file, caption=f"Horarios disponibles para {selected_lab}", use_column_width=True)
 
-    # Si ya elegimos laboratorio y fecha, mostrar lineamientos y paso 2
+    # ---------- Paso 2: Verificar disponibilidad ----------
     if selected_lab and selected_day:
         date_str = selected_day.strftime("%Y-%m-%d")
         show_rules(selected_lab)
 
-        st.write("### Paso 2: Seleccionar horario deseado")
-        col1, col2 = st.columns(2)
-        with col1:
-            selected_start_time = st.selectbox(
-                "Hora de inicio",
-                hours,
-                key='student_start_time_select',
-                on_change=reset_availability
-            )
-        with col2:
-            try:
-                start_index = hours.index(selected_start_time) + 1
-                available_end_times = hours[start_index:]
-                if not available_end_times:
-                    st.error("No hay horas de fin disponibles después de la hora de inicio seleccionada.")
+        st.write("### Paso 2: Seleccionar horario y verificar disponibilidad")
+        with st.form(key='availability_form'):
+            col1, col2 = st.columns(2)
+            with col1:
+                selected_start_time = st.selectbox(
+                    "Hora de inicio",
+                    hours,
+                    key='student_start_time_select',
+                    on_change=clear_availability_state
+                )
+            with col2:
+                try:
+                    start_index = hours.index(selected_start_time) + 1
+                    available_end_times = hours[start_index:]
+                    if not available_end_times:
+                        st.error("No hay horas de fin disponibles después de la hora de inicio seleccionada.")
+                        selected_end_time = None
+                    else:
+                        selected_end_time = st.selectbox(
+                            "Hora de fin",
+                            available_end_times,
+                            key='student_end_time_select',
+                            on_change=clear_availability_state
+                        )
+                except ValueError:
+                    st.error("Hora de inicio seleccionada no es válida.")
                     selected_end_time = None
-                else:
-                    selected_end_time = st.selectbox(
-                        "Hora de fin",
-                        available_end_times,
-                        key='student_end_time_select',
-                        on_change=reset_availability
-                    )
-            except ValueError:
-                st.error("Hora de inicio seleccionada no es válida.")
-                selected_end_time = None
 
-        if selected_start_time and selected_end_time:
-            if st.button("Verificar disponibilidad"):
-                st.session_state['selected_lab'] = selected_lab
-                st.session_state['selected_date'] = selected_day
+            submit_avail = st.form_submit_button("Verificar disponibilidad")
+
+        if submit_avail:
+            if not selected_start_time or not selected_end_time:
+                st.error("Debes seleccionar hora de inicio y hora de fin válidas.")
+            else:
+                # Validar límites de B501
+                if selected_lab == "B501":
+                    max_time = "17:30"
+                    if selected_start_time > max_time or selected_end_time > max_time:
+                        st.error(f"Las reservas en {selected_lab} solo están permitidas hasta las {max_time}.")
+                        return
+
+                # Calcular horas deseadas
+                try:
+                    start_i = hours.index(selected_start_time)
+                    end_i = hours.index(selected_end_time)
+                    desired_hours = hours[start_i:end_i]
+                except ValueError:
+                    st.error("Error al parsear las horas seleccionadas.")
+                    return
+
+                # Cargar datos del día
+                reservations = get_reservations_for_day(date_str)
+                lab_reservations = reservations[reservations['Laboratorio'] == selected_lab]
+                blocked = schedule_data[
+                    (schedule_data['Día'] == date_str) &
+                    (schedule_data['Laboratorio'] == selected_lab)
+                ]
+
+                # Verificar si alguna hora está bloqueada
+                is_blocked = blocked['Hora'].isin(desired_hours).any()
+                if is_blocked:
+                    st.error(f"El horario seleccionado está bloqueado en {selected_lab}.")
+                    return
+
+                # Calcular disponibilidad
+                capacity = lab_capacities[selected_lab]
+                total_res = lab_reservations.groupby('Hora').size().reset_index(name='count')
+                availability = {}
+                for hour in desired_hours:
+                    count = total_res[total_res['Hora'] == hour]['count'].sum()
+                    available_spots = capacity - count if not pd.isna(count) else capacity
+                    availability[hour] = available_spots
+
+                # Chequear si todas las horas tienen cupo
+                if not all(availability[hour] > 0 for hour in desired_hours):
+                    st.error("No hay suficientes cupos en el rango seleccionado.")
+                    return
+
+                # Guardar en session_state para poder mostrar más abajo
+                st.session_state['show_availability'] = True
                 st.session_state['desired_start_time'] = selected_start_time
                 st.session_state['desired_end_time'] = selected_end_time
-                time.sleep(0.2)
-                st.experimental_rerun()
-                return
+                st.session_state['desired_hours'] = desired_hours
+                st.session_state['availability'] = availability
+                st.session_state['available_capacity'] = capacity
 
-    # Si ya hicimos click en "Verificar disponibilidad", están en session_state las 4 claves necesarias
-    if ('selected_lab' in st.session_state and
-        'selected_date' in st.session_state and
-        'desired_start_time' in st.session_state and
-        'desired_end_time' in st.session_state):
-
-        selected_lab = st.session_state['selected_lab']
-        selected_day = st.session_state['selected_date']
-        date_str = selected_day.strftime("%Y-%m-%d")
-        desired_start_time = st.session_state['desired_start_time']
-        desired_end_time = st.session_state['desired_end_time']
-
-        reservations = get_reservations_for_day(date_str)
-        lab_reservations = reservations[reservations['Laboratorio'] == selected_lab]
-        blocked = schedule_data[
-            (schedule_data['Día'] == date_str) &
-            (schedule_data['Laboratorio'] == selected_lab)
-        ]
-
-        capacity = lab_capacities[selected_lab]
-        # B501 sólo hasta 17:30
-        if selected_lab == "B501":
-            max_time = "17:30"
-            if desired_start_time > max_time or desired_end_time > max_time:
-                st.error(f"Las reservas en {selected_lab} solo están permitidas hasta las {max_time}.")
-                for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
-                    st.session_state.pop(key, None)
-                return
-            available_hours = [h for h in hours if h <= max_time]
-        else:
-            available_hours = hours
-
-        # Obtener lista de horas deseadas
-        try:
-            start_i = hours.index(desired_start_time)
-            end_i = hours.index(desired_end_time)
-            desired_hours = hours[start_i:end_i]
-        except ValueError:
-            st.error("Error en la selección de horas.")
-            for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
-                st.session_state.pop(key, None)
-            return
-
-        # Revisar si alguna hora está bloqueada
-        is_blocked = blocked['Hora'].isin(desired_hours).any()
-        if is_blocked:
-            st.error(f"El horario seleccionado está bloqueado en el laboratorio {selected_lab}.")
-            for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
-                st.session_state.pop(key, None)
-            return
-
-        # Revisar disponibilidad según capacidad
-        total_reservations = lab_reservations.groupby('Hora').size().reset_index(name='count')
-        availability = {}
-        for hour in desired_hours:
-            count = total_reservations[total_reservations['Hora'] == hour]['count'].sum()
-            available_spots = capacity - count if not pd.isna(count) else capacity
-            availability[hour] = available_spots
-
-        # Si al menos una hora tiene 0 cupos, no disponible
-        is_available = all(availability[hour] > 0 for hour in desired_hours)
-        if not is_available:
-            st.error("No hay suficientes cupos disponibles en el horario seleccionado.")
-            for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
-                st.session_state.pop(key, None)
-            return
-        else:
+        # ---------- Mostrar disponibilidad si ya fue calculada ----------
+        if st.session_state.get('show_availability', False):
             st.write("### Disponibilidad por horario:")
-            availability_df = pd.DataFrame({
-                'Hora': desired_hours,
-                'Disponibilidad': [availability[hour] for hour in desired_hours]
-            })
-
-            def format_availability(val):
-                return f"{val} cupos disponibles" if val > 0 else "No disponible"
-
-            availability_df['Disponibilidad'] = availability_df['Disponibilidad'].apply(format_availability)
-
-            for _, row in availability_df.iterrows():
-                hora = row['Hora']
-                disponibilidad = row['Disponibilidad']
-                if disponibilidad == "No disponible":
-                    st.markdown(f"**{hora}** - No disponible")
+            availability = st.session_state['availability']
+            capacity = st.session_state['available_capacity']
+            for hour in st.session_state['desired_hours']:
+                avail_spots = availability[hour]
+                if avail_spots <= 0:
+                    st.markdown(f"**{hour}** - No disponible")
                     st.progress(0)
                 else:
-                    cupos = int(disponibilidad.split()[0])
-                    porcentaje = cupos / capacity
-                    st.markdown(f"**{hora}** - {cupos} cupos disponibles")
-                    st.progress(porcentaje)
+                    st.markdown(f"**{hour}** - {avail_spots} cupos disponibles")
+                    st.progress(avail_spots / capacity)
 
-            # Paso 3: Confirmar reserva
+            # ---------- Paso 3: Confirmar reserva ----------
             st.write("### Paso 3: Confirmar reserva")
             with st.form(key='confirm_reservation_form'):
                 if selected_lab == 'C402':
@@ -1098,7 +1062,7 @@ def student_view():
                     reservation_type = st.radio("Tipo de reserva", ['Individual', 'Grupal'], key='reservation_type_confirm')
                     if reservation_type == 'Grupal':
                         grupo = st.text_input("Nombre del grupo", key='group_name_confirm')
-                        cantidad_alumnos = st.number_input("Cantidad de alumnos", min_value=2, max_value=22, key='group_size_confirm')
+                        cantidad_alumnos = st.number_input("Cantidad de alumnos", min_value=2, max_value=lab_capacities['C402'], key='group_size_confirm')
                     else:
                         grupo = ""
                         cantidad_alumnos = 1
@@ -1112,69 +1076,65 @@ def student_view():
                 submit_confirm = st.form_submit_button("Confirmar reserva")
 
             if submit_confirm:
-                # No reservar en horarios pasados (si es hoy)
+                # Prevenir reservas pasadas si la fecha es hoy
                 if selected_day == datetime.today().date():
                     current_time = datetime.now().strftime("%H:%M")
-                    if desired_start_time <= current_time:
+                    if st.session_state['desired_start_time'] <= current_time:
                         st.error("No puedes reservar en horarios pasados.")
-                        for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
-                            st.session_state.pop(key, None)
                         return
 
-                # Verificar acceso a C402
+                # Verificar acceso C402
                 if selected_lab == 'C402' and user_row['C402_access'] == 0:
                     st.error("No tienes acceso al laboratorio C402.")
-                    for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
-                        st.session_state.pop(key, None)
                     return
 
-                # Verificar límite grupal
+                # Límite grupal para C402
                 if selected_lab == 'C402' and reservation_type == 'Grupal':
                     if os.path.exists(group_limits_file):
                         limits = pd.read_excel(group_limits_file, index_col=None)
                         limits = limits.loc[:, ~limits.columns.str.contains('^Unnamed')]
                     else:
                         limits = pd.DataFrame(columns=['Tipo', 'Límite'])
-                    group_limit = limits[limits['Tipo'] == 'Grupal']['Límite'].values
-                    if len(group_limit) > 0 and cantidad_alumnos > group_limit[0]:
-                        st.error(f"El límite de alumnos por grupo es {group_limit[0]}.")
+                    grp_lim = limits[limits['Tipo'] == 'Grupal']['Límite'].values
+                    if len(grp_lim) > 0 and cantidad_alumnos > grp_lim[0]:
+                        st.error(f"El límite de alumnos por grupo es {grp_lim[0]}.")
                         return
 
-                # Verificar capacidad total en C402
+                # Verificar capacidad global en C402
                 if selected_lab == 'C402':
-                    current_total = lab_reservations['Cantidad_alumnos'].sum()
+                    current_total = sum(reservations['Cantidad_alumnos'])
                     new_total = current_total + cantidad_alumnos
                     if new_total > lab_capacities['C402']:
-                        st.error(f"Al agregar esta reserva, el total de alumnos ({new_total}) excede la capacidad máxima de C402 ({lab_capacities['C402']}).")
+                        st.error(f"Al agregar esta reserva, total ({new_total}) excede capacidad máxima ({lab_capacities['C402']}).")
                         return
 
-                # Guardar la reserva en el archivo de fecha
+                # Guardar la reserva
                 reservations_all = get_reservations_for_day(date_str)
-                new_reservations = pd.DataFrame({
-                    'Nombre': [user_row['Nombre']] * len(desired_hours),
-                    'Apellido': [user_row['Apellido']] * len(desired_hours),
-                    'Código': [user_row['Código']] * len(desired_hours),
-                    'Correo': [user_row['Correo']] * len(desired_hours),
-                    'Laboratorio': [selected_lab] * len(desired_hours),
-                    'Hora': desired_hours,
-                    'Propósito': [propósito] * len(desired_hours),
-                    'Tipo': [reservation_type] * len(desired_hours),
-                    'Grupo': [grupo] * len(desired_hours),
-                    'Cantidad_alumnos': [cantidad_alumnos] * len(desired_hours)
+                new_entries = pd.DataFrame({
+                    'Nombre': [user_row['Nombre']] * len(st.session_state['desired_hours']),
+                    'Apellido': [user_row['Apellido']] * len(st.session_state['desired_hours']),
+                    'Código': [user_row['Código']] * len(st.session_state['desired_hours']),
+                    'Correo': [user_row['Correo']] * len(st.session_state['desired_hours']),
+                    'Laboratorio': [selected_lab] * len(st.session_state['desired_hours']),
+                    'Hora': st.session_state['desired_hours'],
+                    'Propósito': [propósito] * len(st.session_state['desired_hours']),
+                    'Tipo': [reservation_type] * len(st.session_state['desired_hours']),
+                    'Grupo': [grupo] * len(st.session_state['desired_hours']),
+                    'Cantidad_alumnos': [cantidad_alumnos] * len(st.session_state['desired_hours'])
                 })
                 if reservations_all.empty:
-                    reservations_all = new_reservations
+                    reservations_all = new_entries
                 else:
-                    reservations_all = pd.concat([reservations_all, new_reservations], ignore_index=True)
+                    reservations_all = pd.concat([reservations_all, new_entries], ignore_index=True)
                 save_reservations_for_day(reservations_all, date_str)
-                st.success(f"Reserva exitosa para el {date_str} de {desired_start_time} a {desired_end_time} en {selected_lab}.")
-                time.sleep(1)
-                for key in ['selected_lab', 'selected_date', 'desired_start_time', 'desired_end_time']:
-                    st.session_state.pop(key, None)
-                st.experimental_rerun()
+                st.success(f"Reserva exitosa para el {date_str} de {st.session_state['desired_start_time']} a {st.session_state['desired_end_time']} en {selected_lab}.")
+                # Limpiar estado de disponibilidad
+                clear_availability_state()
                 return
 
-    # Separador y sección de comentarios
+    # ------------------------------
+    # SECCIÓN DE COMENTARIOS
+    # ------------------------------
     st.write("---")
     comments_section()
 
