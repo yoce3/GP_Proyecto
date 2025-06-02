@@ -961,10 +961,10 @@ def student_view():
                 selected_start_time = st.selectbox(
                     "Hora de inicio",
                     hours,
-                    key='student_start_time_select',
-                    on_change=clear_availability_state
+                    key='student_start_time_select'
                 )
             with col2:
+                # Calcular horas de fin disponibles basadas en inicio
                 try:
                     start_index = hours.index(selected_start_time) + 1
                     available_end_times = hours[start_index:]
@@ -975,8 +975,7 @@ def student_view():
                         selected_end_time = st.selectbox(
                             "Hora de fin",
                             available_end_times,
-                            key='student_end_time_select',
-                            on_change=clear_availability_state
+                            key='student_end_time_select'
                         )
                 except ValueError:
                     st.error("Hora de inicio seleccionada no es válida.")
@@ -1032,7 +1031,7 @@ def student_view():
                     st.error("No hay suficientes cupos en el rango seleccionado.")
                     return
 
-                # Guardar en session_state para poder mostrar más abajo
+                # Guardar en session_state para mostrar disponibilidad abajo
                 st.session_state['show_availability'] = True
                 st.session_state['desired_start_time'] = selected_start_time
                 st.session_state['desired_end_time'] = selected_end_time
@@ -1062,7 +1061,12 @@ def student_view():
                     reservation_type = st.radio("Tipo de reserva", ['Individual', 'Grupal'], key='reservation_type_confirm')
                     if reservation_type == 'Grupal':
                         grupo = st.text_input("Nombre del grupo", key='group_name_confirm')
-                        cantidad_alumnos = st.number_input("Cantidad de alumnos", min_value=2, max_value=lab_capacities['C402'], key='group_size_confirm')
+                        cantidad_alumnos = st.number_input(
+                            "Cantidad de alumnos",
+                            min_value=2,
+                            max_value=lab_capacities['C402'],
+                            key='group_size_confirm'
+                        )
                     else:
                         grupo = ""
                         cantidad_alumnos = 1
