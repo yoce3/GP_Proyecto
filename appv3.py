@@ -1106,10 +1106,12 @@ def student_view():
 
                 # Verificar capacidad global en C402
                 if selected_lab == 'C402':
-                    current_total = sum(reservations['Cantidad_alumnos'])
+                    current_total = sum(lab_reservations['Cantidad_alumnos'])
                     new_total = current_total + cantidad_alumnos
                     if new_total > lab_capacities['C402']:
-                        st.error(f"Al agregar esta reserva, total ({new_total}) excede capacidad máxima ({lab_capacities['C402']}).")
+                        st.error(
+                            f"Al agregar esta reserva, total ({new_total}) excede capacidad máxima ({lab_capacities['C402']})."
+                        )
                         return
 
                 # Guardar la reserva
